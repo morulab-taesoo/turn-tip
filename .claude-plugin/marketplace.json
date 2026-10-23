@@ -1,0 +1,12 @@
+{
+  "name": "morulab",
+  "owner": { "name": "morulab-taesoo" },
+  "metadata": { "description": "morulab 의 Claude Code 모드" },
+  "plugins": [
+    {
+      "name": "turn-tip",
+      "source": "./",
+      "description": "턴이 끝날 때 사용자가 확인하거나 직접 해야 할 일이 있으면 입력창 위 띠에 한 줄로 띄워요"
+    }
+  ]
+}

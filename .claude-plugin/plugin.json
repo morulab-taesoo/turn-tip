@@ -1,0 +1,6 @@
+{
+  "name": "turn-tip",
+  "version": "0.1.0",
+  "description": "턴이 끝날 때 사용자가 확인하거나 직접 해야 할 일이 있으면 입력창 위 띠에 한 줄로 띄워요",
+  "types": "./types/index.d.ts"
+}
