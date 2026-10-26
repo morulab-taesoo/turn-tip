@@ -4,6 +4,8 @@ export type Tip = { kind: TipKind; text: string }
 
 export type View =
   | { kind: 'working' }
+  // 턴 도중 Claude 가 질문 창(AskUserQuestion)을 띄우고 답을 기다리는 중. question 은 첫 질문.
+  | { kind: 'asking'; question: string }
   | { kind: 'checking'; turnId: string }
   | { kind: 'clear'; turnId: string }
   | { kind: 'tip'; tips: readonly Tip[]; turnId: string }

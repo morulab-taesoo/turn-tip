@@ -14,6 +14,7 @@ import {
   restoredView,
   copyText,
   copyRows,
+  firstQuestion,
   type SavedBand,
   spinnerFrame,
   cacheSurprise,
@@ -176,6 +177,39 @@ test('응답 중에도 기록 버튼을 누르면 기록 창이 열려요', asyn
     await ui.unmount()
   }
   expect(opened).toEqual(['turn-tip-log', 'turn-tip-log'])
+})
+
+test('질문 창이 떠 있는 동안 띠에 답해 달라는 안내가 뜨고, 답하면 응답 중으로 돌아가요', async ($, on) => {
+  world(on)
+  let answer: () => void = () => {}
+  on('tool.call', { tool: 'AskUserQuestion' }, () => new Promise(resolve => (answer = () => resolve({ result: '네' } as never))))
+  on('prompt.submit', async (_, e) => ({ text: e.text }))
+  await $.prompt.submit({ text: '고쳐 줘' })
+  await settle()
+
+  const asking = $.tool.call({ tool: 'AskUserQuestion', questions: [{ question: '어느 쪽으로 할까요?', header: '방식', options: [], multiSelect: false }] } as never)
+  await settle()
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface, props: { ...BAND.props, isWorking: true } })
+    expect(await ui.find({ type: 'Text', text: /질문에 답해 주세요/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /어느 쪽으로 할까요/ })).toBeDefined()
+    await ui.unmount()
+  }
+
+  answer()
+  await asking
+  await settle()
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
+  expect(await ui.find({ type: 'Text', text: /질문에 답해 주세요/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /응답이 끝나면/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('firstQuestion 은 첫 질문과 남은 개수를 적어요', async () => {
+  expect(firstQuestion({ questions: [{ question: ' 하나? ' }] })).toBe('하나?')
+  expect(firstQuestion({ questions: [{ question: '하나?' }, { question: '둘?' }] })).toBe('하나? 외 1개')
+  expect(firstQuestion({})).toBe('')
+  expect(restoredView({ kind: 'asking', question: '하나?' })).toBe(null)
 })
 
 test('다음 턴에는 이미 보여 준 팁을 프롬프트에 넘겨요', async ($, on) => {
