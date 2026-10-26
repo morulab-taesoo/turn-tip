@@ -21,6 +21,18 @@ export const LOG_PANE = 'turn-tip-log'
 export const CLEAR_TEXT = '이번 턴에는 확인할 만한 것이 없어요'
 export const CHECKING_TEXT = '확인할 것을 찾는 중…'
 export const WORKING_TEXT = '응답이 끝나면 확인할 것을 찾아요'
+// 질문 창이 떠 있는 동안은 턴이 끝나지 않아서 팁 대신 이 안내를 띄워요.
+export const ASKING_TEXT = '질문에 답해 주세요'
+export const QUESTION_KEPT = 100
+
+// AskUserQuestion 입력에서 띠에 보일 첫 질문 (없거나 모양이 다르면 '').
+export function firstQuestion(input: unknown): string {
+  const questions = (input as { questions?: unknown } | null)?.questions
+  const first = Array.isArray(questions) ? (questions[0] as { question?: unknown } | undefined)?.question : undefined
+  if (typeof first !== 'string') return ''
+  const extra = Array.isArray(questions) && questions.length > 1 ? ` 외 ${questions.length - 1}개` : ''
+  return `${first.trim().slice(0, QUESTION_KEPT)}${extra}`
+}
 // 앱에 스피너 요소가 없어서, 타이머로 다시 그리며 글자를 돌려요.
 // 응답 중과 확인 중을 스피너 모양·색으로 구분해요 (색은 테마를 따라가는 이름).
 export const SPINNERS = {
@@ -501,7 +513,7 @@ export type SavedBand = {
 
 // 진행 중이던 상태는 이어 갈 수 없어서 바꿔요: 응답 중·확인 중은 비우고, 설명 받는 중은 팁으로.
 export function restoredView(v: View | null): View | null {
-  if (v === null || v.kind === 'working' || v.kind === 'checking') return null
+  if (v === null || v.kind === 'working' || v.kind === 'asking' || v.kind === 'checking') return null
   if (v.kind === 'explaining') return { kind: 'tip', tips: v.tips, turnId: v.turnId }
   return v
 }
@@ -686,6 +698,22 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // 질문 창은 턴 안의 도구라 turn.complete 가 오지 않아요: 창이 떠 있는 동안 띠에 안내를 띄워요.
+  // next(e) 가 질문 창을 띄우고 답을 받을 때(또는 닫힐 때) 끝나요.
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    if (e.agentId !== undefined) return next(e)
+    await update($, view, () => ({ kind: 'asking', question: firstQuestion(e) }))
+    await update($, isHidden, () => false)
+    $.ui.invalidate('ui.render')
+    void trace($, '질문 창')
+    try {
+      return await next(e)
+    } finally {
+      await update($, view, v => (v?.kind === 'asking' ? { kind: 'working' } : v))
+      $.ui.invalidate('ui.render')
+    }
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     // 메인 대화의 정상 종료만 봐요 (하위 에이전트·중단된 턴 제외).
@@ -855,6 +883,23 @@ export const register: Register = on => {
         <Box width="100%" flexDirection="column" gap="xs">
           {header([openLog, hide])}
           <Input key="copy-field" value={toCopy} rows={copyRows(toCopy)} autoFocus submitLabel="완료" onSubmit={setCopying(false)} />
+          {warning}
+        </Box>
+      )
+    }
+
+    if (current.kind === 'asking') {
+      return (
+        <Box width="100%" flexDirection="column" gap="xs">
+          <Box width="100%" columnGap="sm" alignItems="center">
+            <Box flexGrow={1} flexShrink={1} flexDirection="column">
+              <Text key="asking" weight="bold" color="permission">❓ {ASKING_TEXT}</Text>
+              {current.question === '' ? null : (
+                <Text key="question" size="footnote" dimColor>{current.question}</Text>
+              )}
+            </Box>
+            <Box flexShrink={0}>{openLog}</Box>
+          </Box>
           {warning}
         </Box>
       )
