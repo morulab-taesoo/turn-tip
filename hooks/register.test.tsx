@@ -258,6 +258,9 @@ test('응답 완료 숫자: 모델 이름·토큰·비용·시간을 짧게 적�
   const usage = { model: 'claude-opus-5-5', input_tokens: 200, output_tokens: 1500, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 2000 }
   expect(statsParts(turnStats({ turnId: 't', durationMs: 83_000, usage }, 0.4251), 0)).toEqual(['Opus 5.5', '입력 42k · 출력 1.5k tok', '$0.43', '1분 23초'])
   expect(statsParts(turnStats({ turnId: 't', durationMs: 5_000 }, undefined), 0)).toEqual(['5초'])
+  // 세션 총 비용을 알면 이번 턴 비용 옆에 '총'으로 붙여요.
+  expect(statsParts({ turnId: 't', durationMs: 5_000, usd: 0.07, sessionUsd: 3.214 }, 0)).toEqual(['$0.07 / 총 $3.21', '5초'])
+  expect(statsParts({ turnId: 't', durationMs: 5_000, sessionUsd: 3.214 }, 0)).toEqual(['총 $3.21', '5초'])
   expect(statsParts({ turnId: 't', durationMs: 5_000, cacheUntil: 1000 }, 2000)).toEqual(['5초', '캐시 만료'])
   expect(statsParts({ turnId: 't', durationMs: 5_000, cacheUntil: 3_600_000 }, 48_000)).toEqual(['5초', '캐시 59:12'])
   expect([countdown(3_600_000), countdown(59_001), countdown(0)]).toEqual(['1:00:00', '01:00', '00:00'])
@@ -302,8 +305,13 @@ test('턴이 끝나면 띠 맨 위에 응답 완료 제목과 숫자가 떠요',
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /응답 완료/ })).toBeDefined()
 
-  expect((await ui.find({ type: 'Text', text: /Opus 5.5/ }))?.text).toBe("Opus 5.5 · 입력 100 · 출력 900 tok · 12초 · 캐시 ~1:00:00")
-  expect((await ui.find({ type: 'Text', text: /🔍 Haiku/ }))?.text).toBe('│ 🔍 Haiku 5.5 · 1.0k tok · $0.0002')
+  // 숫자는 모델마다 한 줄: 주 모델(대화), 보조 모델(팁 찾기).
+  expect((await ui.find({ type: 'Text', text: /Opus 5.5/ }))?.text).toBe('주 모델  Opus 5.5 · 입력 100 · 출력 900 tok · 12초 · 캐시 ~1:00:00')
+  expect((await ui.find({ type: 'Text', text: /Haiku/ }))?.text).toBe('보조 모델  Haiku 5.5 · 팁 찾기 · 1.0k tok · $0.0002')
+  // 버튼은 아이콘만, 이름은 label 로 남아요.
+  for (const [key, icon] of [['explain', '💬'], ['copy', '📋'], ['log', '🕘'], ['hide', '✕']] as const) {
+    expect((await ui.find({ key }))?.text).toBe(icon)
+  }
   await ui.unmount()
 })
 
