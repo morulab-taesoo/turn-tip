@@ -22,6 +22,8 @@ export type TurnStats = {
   inputTokens?: number
   outputTokens?: number
   usd?: number
+  // 턴이 끝났을 때 세션 누계 비용 (띠에 '총'으로 보여요).
+  sessionUsd?: number
   // 메인 모델의 프롬프트 캐시가 식는 시각 ($.clock.now() 의 ms).
   cacheUntil?: number
   // 대화 기록에서 TTL 을 못 읽어 1시간으로 짐작했으면 true (띠에 '~' 표시).

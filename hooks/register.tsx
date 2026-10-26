@@ -247,7 +247,10 @@ export function statsParts(s: TurnStats, now: number): string[] {
     ...(s.inputTokens === undefined || s.outputTokens === undefined
       ? []
       : [`입력 ${formatTokens(s.inputTokens)} · 출력 ${formatTokens(s.outputTokens)} tok`]),
-    ...(s.usd === undefined ? [] : [formatUsd(s.usd)]),
+    // 이번 턴 비용 / 세션 총 비용. 한쪽만 알면 그쪽만.
+    ...(s.usd === undefined && s.sessionUsd === undefined
+      ? []
+      : [[s.usd === undefined ? '' : formatUsd(s.usd), s.sessionUsd === undefined ? '' : `총 ${formatUsd(s.sessionUsd)}`].filter(t => t !== '').join(' / ')]),
     formatDuration(s.durationMs),
     ...cachePart(s, now),
   ]
@@ -283,8 +286,13 @@ export function cacheSurprise(prevUntil: number | undefined, startedAt: number, 
 }
 
 // 점검 모델 몫: "🔍 Haiku 5.5 · 3.1k tok · $0.0004".
+// 띠 버튼은 아이콘만 그려요. 데스크톱 앱은 버튼 안쪽(children)이 아니라 label 을 그려서, label 에 아이콘을 넣어요.
+export const ICONS = { explain: '💬', copy: '📋', log: '🕘', hide: '✕' } as const
+
+export const MAIN_LABEL = '주 모델'
+export const TIP_LABEL = '보조 모델'
 export const tipStatsText = (tip: NonNullable<TurnStats['tip']>) =>
-  `🔍 ${modelName(tip.model)} · ${formatTokens(tip.tokens)} tok · ${formatSmallUsd(tip.usd)}`
+  `${modelName(tip.model)} · 팁 찾기 · ${formatTokens(tip.tokens)} tok · ${formatSmallUsd(tip.usd)}`
 
 export function tipUsd(usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }): number {
   const input = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
@@ -729,6 +737,7 @@ export const register: Register = on => {
 
     const usdNow = await sessionUsd($)
     const stats = turnStats(e, costBase === undefined || usdNow === undefined ? undefined : usdNow - costBase)
+    if (usdNow !== undefined) stats.sessionUsd = usdNow
     // 요청이 있었던 턴만: 마지막 요청(턴 끝)부터 캐시가 유지돼요. 식으면 '캐시 만료'로 다시 그려요.
     if (firstStep?.turnId === e.turnId) {
       stats.cacheHit = firstStep.hit
@@ -809,34 +818,36 @@ export const register: Register = on => {
 
     const { Box, Button, Input, Markdown, Svg, Text } = $.ui.resolve(e)
     const warning = issue === null ? null : <Text key="problem" size="footnote" dimColor>turn-tip · {issue}</Text>
-    // '응답 완료' 제목과 그 턴의 모델·토큰·비용·시간 (응답이 끝난 뒤의 상태에서만).
+    // '응답 완료' 제목과 그 턴의 숫자 (응답이 끝난 뒤의 상태에서만).
     const stats = await read($, lastStats)
-    const titleParts =
-      stats === null || current === null || current.kind === 'working' || current.turnId !== stats.turnId
+    const isDone = stats !== null && current !== null && current.kind !== 'working' && current.kind !== 'asking' && current.turnId === stats.turnId
+    // 숫자는 모델마다 한 줄: 주 모델(대화)과 보조 모델(팁 찾기). 제목 줄엔 버튼만 있어서 숫자가 띠 폭을 다 써요.
+    const statsLine = (key: string, name: string, text: string) => (
+      <Text key={key} size="footnote" dimColor>
+        {name}  {text}
+      </Text>
+    )
+    const statsLines =
+      !isDone || stats === null
         ? null
         : [
-            <Text key="done-title" weight="bold">✅ {DONE_TITLE}</Text>,
-            <Text key="done-stats" size="footnote" dimColor>
-              {statsParts(stats, await $.clock.now()).join(' · ')}
-            </Text>,
-            stats.tip === undefined ? null : (
-              <Text key="tip-stats" size="footnote" dimColor>
-                │ {tipStatsText(stats.tip)}
-              </Text>
-            ),
+            statsLine('done-stats', MAIN_LABEL, statsParts(stats, await $.clock.now()).join(' · ')),
+            stats.tip === undefined ? null : statsLine('tip-stats', TIP_LABEL, tipStatsText(stats.tip)),
           ]
-    // 제목 줄: 왼쪽에 '응답 완료'와 숫자, 오른쪽에 버튼. 버튼을 제목 줄로 올려서 아래 팁·입력칸·설명이 띠 폭을 다 써요.
     const header = (buttons: RenderChildren = null) =>
-      titleParts === null && buttons === null ? null : (
-        <Box width="100%" columnGap="sm" alignItems="center">
-          <Box flexGrow={1} flexShrink={1} columnGap="sm" alignItems="center" flexWrap="wrap">
-            {titleParts}
-          </Box>
-          {buttons === null ? null : (
-            <Box flexShrink={0} columnGap="sm" alignItems="center">
-              {buttons}
+      !isDone && buttons === null ? null : (
+        <Box width="100%" flexDirection="column">
+          <Box width="100%" columnGap="sm" alignItems="center">
+            <Box flexGrow={1} flexShrink={1}>
+              {isDone ? <Text key="done-title" weight="bold">✅ {DONE_TITLE}</Text> : null}
             </Box>
-          )}
+            {buttons === null ? null : (
+              <Box flexShrink={0} columnGap="xs" alignItems="center">
+                {buttons}
+              </Box>
+            )}
+          </Box>
+          {statsLines}
         </Box>
       )
     const title = header()
@@ -849,7 +860,7 @@ export const register: Register = on => {
       <Button
         key="hide"
         role="dismiss"
-        label="닫기"
+        label={ICONS.hide}
         onPress={async () => {
           await update($, isHidden, () => true)
           await update($, isCopying, () => false)
@@ -863,7 +874,7 @@ export const register: Register = on => {
         key="log"
         variant="secondary"
         hotkey="r"
-        label="기록"
+        label={ICONS.log}
         onPress={() => $.ui.open({ id: LOG_PANE, title: '팁 기록', focus: true, closeOnEscape: true })}
       />
     )
@@ -874,7 +885,7 @@ export const register: Register = on => {
     }
     const copy =
       toCopy === null ? null : (
-        <Button key="copy" variant="secondary" hotkey="c" label="복사" onPress={setCopying(true)} />
+        <Button key="copy" variant="secondary" hotkey="c" label={ICONS.copy} onPress={setCopying(true)} />
       )
     if (toCopy !== null && (await read($, isCopying))) {
       // 팁 자리가 입력칸이 돼요. 입력칸이 옆에 제 '완료'(Enter)를 그려서, 제목 줄엔 완료 버튼을 따로 두지 않아요.
@@ -992,7 +1003,7 @@ export const register: Register = on => {
           current.kind === 'explaining' ? (
             <Text key="explaining" size="footnote" dimColor>설명 받는 중…</Text>
           ) : (
-            <Button key="explain" variant="primary" hotkey="d" label="자세히" onPress={explain} />
+            <Button key="explain" variant="primary" hotkey="d" label={ICONS.explain} onPress={explain} />
           ),
           copy,
           openLog,
