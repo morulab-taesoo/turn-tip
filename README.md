@@ -9,7 +9,7 @@ Claude Code의 턴이 끝날 때, 사용자가 확인하거나 직접 해야 할
 
 셸에서:
 
-```bash
+```powershell
 claude plugin install turn-tip --marketplace morulab-taesoo/turn-tip
 ```
 
@@ -39,7 +39,7 @@ Claude Code 입력창에서:
 
 ## 업데이트
 
-```bash
+```powershell
 claude plugin update turn-tip@morulab
 ```
 
@@ -47,7 +47,7 @@ claude plugin update turn-tip@morulab
 
 ## 지우기
 
-```bash
+```powershell
 claude plugin uninstall turn-tip@morulab
 ```
 
